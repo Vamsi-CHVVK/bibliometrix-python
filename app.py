@@ -854,8 +854,66 @@ with ui.tags.div(id="mainContent", class_="main-content"):
                 ),
 
         with ui.nav_panel("None", value="API"):
-            ui.h3("🚧 Warning: API is under construction 🚧")
-        
+            ui.h3("🌐 API Data Extraction", style="color: #5567BB;")
+            ui.p("Fetch data directly from Open-Access APIs (OpenAlex or PubMed) to instantly begin your bibliometric analysis.")
+            
+            with ui.layout_sidebar(fillable=False, fill=False):
+                with ui.sidebar(id="sidebar_api", position="right"):
+                    ui.h4("API Options", style="color: #5567BB;")
+                    ui.input_select("api_source", "Select API Platform", choices={"OpenAlex": "OpenAlex", "PubMed": "PubMed"}, selected="OpenAlex")
+                    ui.input_text("api_query", "Search Query (e.g. 'machine learning')", value="")
+                    ui.input_action_button("btn_fetch_api", "Fetch Data", class_="btn-primary", style="margin-top: 10px; background-color: #5567BB; color: white; width: 100%;")
+                
+                with ui.card():
+                    ui.h4("API Extraction Status", style="color: #5567BB;")
+                    @render.express()
+                    def api_status_message():
+                        if input.btn_fetch_api() == 0:
+                            ui.p("Enter a query and click 'Fetch Data' to begin. The data will automatically be standardized to the Web of Science format.")
+                        else:
+                            ui.p(f"Fetched data from {input.api_source()} for query: '{input.api_query()}'")
+                    
+                    @render.data_frame
+                    @reactive.event(input.btn_fetch_api)
+                    def api_preview_table():
+                        if not input.api_query():
+                            return pd.DataFrame([{"Message": "Please enter a search query."}])
+                        
+                        m = ui.modal(
+                            ui.div(
+                                ui.img(src="https://cisslaboral.laleynext.es/Img/loader-circle.gif", height="150px", style="display: block; margin: 0 auto;"),
+                                ui.h4(f"Fetching data from {input.api_source()}...", style="text-align: center;")
+                            ),
+                            easy_close=False, footer=None
+                        )
+                        ui.modal_show(m)
+                        
+                        try:
+                            # Run our ETL pipeline
+                            res_df = ETLPipeline.convert2df(
+                                source_data="API", 
+                                source_type=input.api_source(), 
+                                is_api=True, 
+                                query=input.api_query()
+                            )
+                            # Update global state
+                            df.set(res_df)
+                            
+                            # Serialize to CSV for physical file output
+                            csv_df = res_df.copy()
+                            for col in csv_df.columns:
+                                csv_df[col] = csv_df[col].apply(lambda x: ";".join(str(i) for i in x) if isinstance(x, list) else x)
+                            csv_df.to_csv("standardized_api_data.csv", index=False)
+                            
+                            reset_all_analyses()
+                            ui.modal_remove()
+                            ui.notification_show(f"Successfully extracted {len(res_df)} records! Saved to 'standardized_api_data.csv'.", type="message", duration=5)
+                            
+                            return res_df.head(20)
+                        except Exception as e:
+                            ui.modal_remove()
+                            ui.notification_show(f"Error fetching data: {str(e)}", type="error", duration=10)
+                            return pd.DataFrame([{"Error": str(e)}])
         with ui.nav_panel("None", value="collections"):
             ui.h3("🚧 Warning: Merge Collection is under construction 🚧")
 
@@ -2104,9 +2162,7 @@ with ui.tags.div(id="mainContent", class_="main-content"):
                                         ui.p("Click the Run Analysis button to generate the sources' production over time visualization.", style="text-align: center; color: #666; font-size: 16px;"),
                                         style="height: 400px; display: flex; flex-direction: column; justify-content: center; align-items: center; border: 2px dashed #ddd; border-radius: 10px; margin: 20px;"
                                     )
-                                # Render the widget directly when result is available
-                                plot_sources_production, _ = result
-                                return plot_sources_production
+                                return None  # Hide placeholder when data is available
                             
                             @render_widget  
                             def show_sources_production():
@@ -2251,9 +2307,7 @@ with ui.tags.div(id="mainContent", class_="main-content"):
                                         ui.p("Click the Run Analysis button to generate the most relevant authors visualization.", style="text-align: center; color: #666; font-size: 16px;"),
                                         style="height: 400px; display: flex; flex-direction: column; justify-content: center; align-items: center; border: 2px dashed #ddd; border-radius: 10px; margin: 20px;"
                                     )
-                                # Render the widget directly when result is available
-                                plot_relevant_authors, _ = result
-                                return plot_relevant_authors
+                                return None  # Hide placeholder when data is available
                             
                             @render_widget
                             def show_relevant_authors():
@@ -2399,9 +2453,7 @@ with ui.tags.div(id="mainContent", class_="main-content"):
                                         ui.p("Click the Run Analysis button to generate the most local cited authors visualization.", style="text-align: center; color: #666; font-size: 16px;"),
                                         style="height: 400px; display: flex; flex-direction: column; justify-content: center; align-items: center; border: 2px dashed #ddd; border-radius: 10px; margin: 20px;"
                                     )
-                                # Render the widget directly when result is available
-                                plot_local_cited_authors, _ = result
-                                return plot_local_cited_authors
+                                return None  # Hide placeholder when data is available
                             
                             @render_widget
                             def show_local_cited_authors():
@@ -2544,9 +2596,7 @@ with ui.tags.div(id="mainContent", class_="main-content"):
                                         ui.p("Click the Run Analysis button to generate the authors' production over time visualization.", style="text-align: center; color: #666; font-size: 16px;"),
                                         style="height: 400px; display: flex; flex-direction: column; justify-content: center; align-items: center; border: 2px dashed #ddd; border-radius: 10px; margin: 20px;"
                                     )
-                                # Render the widget directly when result is available
-                                plot_authors_production, _, _ = result
-                                return plot_authors_production
+                                return None  # Hide placeholder when data is available
                             
                             @render_widget
                             def show_authors_production():
@@ -2861,9 +2911,7 @@ with ui.tags.div(id="mainContent", class_="main-content"):
                                         ui.p("Click the Run Analysis button to generate the authors' local impact visualization.", style="text-align: center; color: #666; font-size: 16px;"),
                                         style="height: 400px; display: flex; flex-direction: column; justify-content: center; align-items: center; border: 2px dashed #ddd; border-radius: 10px; margin: 20px;"
                                     )
-                                # Render the widget directly when result is available
-                                plot_authors_local_impact, _ = result
-                                return plot_authors_local_impact
+                                return None  # Hide placeholder when data is available
                             
                             @render_widget
                             def show_authors_local_impact():
@@ -3008,9 +3056,7 @@ with ui.tags.div(id="mainContent", class_="main-content"):
                                         ui.p("Click the Run Analysis button to generate the most relevant affiliations visualization.", style="text-align: center; color: #666; font-size: 16px;"),
                                         style="height: 400px; display: flex; flex-direction: column; justify-content: center; align-items: center; border: 2px dashed #ddd; border-radius: 10px; margin: 20px;"
                                     )
-                                # Render the widget directly when result is available
-                                plot_relevant_affiliations, _ = result
-                                return plot_relevant_affiliations
+                                return None  # Hide placeholder when data is available
                             
                             @render_widget
                             def show_relevant_affiliations():
@@ -8185,99 +8231,101 @@ with ui.tags.div(id="mainContent", class_="main-content"):
 
 # --- Sidebar Management ---
 @render.express()
-@reactive.event(input.start_button)
 def toggle_sidebar():
-    with ui.tags.div(id="sidebar_2", class_="custom-sidebar"):
-        with ui.accordion(id="sidebar_accordion_data", multiple=False, open=False):
-            # Info Section
-            with ui.accordion_panel("Biblioshiny", icon=ICONS["home_colored"]):
-                ui.input_action_button("go_about_2", "Biblioshiny", class_="sidebar-button", icon=ICONS["home"])
-            # Data Section
-            with ui.accordion_panel("Data", icon=ICONS["database_colored"]):
-                ui.input_action_button("go_import_2", "Import or Load", class_="sidebar-button", icon=ICONS["data"])
-                ui.input_action_button("go_api_2", "API", class_="sidebar-button", icon=ICONS["api"])
-                ui.input_action_button("go_collections_2", "Merge Collection", class_="sidebar-button", icon=ICONS["merge"])
-
-            # Filters Section
-            with ui.accordion_panel("Filters", icon=ICONS["filters_colored"]):
-                ui.input_action_button("go_filters", "Filters", class_="sidebar-button", icon=ICONS["filters"])
-
-            # Analysis Section
-            with ui.accordion_panel("Overview", icon=ICONS["play_colored"]):
-                ui.input_action_button("go_main", "Main Information", class_="sidebar-button", icon=ICONS["overview"])
-                ui.input_action_button("go_annual_scientific_production", "Annual Scientific Production", class_="sidebar-button", icon=ICONS["annual_growth_rate"])
-                ui.input_action_button("go_average_citations_per_year", "Average Citations per Year", class_="sidebar-button", icon=ICONS["average_citations_per_doc"])
-                ui.input_action_button("go_three_field_plot", "Three-Field Plot", class_="sidebar-button", icon=ICONS["overview"])
-            with ui.accordion_panel("Sources", icon=ICONS["sources_colored"]):
-                ui.input_action_button("go_most_relevant_sources", "Most Relevant Sources", class_="sidebar-button", icon=ICONS["book_open"] if "book_open" in ICONS else ICONS["sources"]),
-                ui.input_action_button("go_most_local_cited_sources", "Most Local Cited Sources", class_="sidebar-button", icon=ICONS["book"] if "book" in ICONS else ICONS["sources"]),
-                ui.input_action_button("go_bradfords_law", "Bradford's Law", class_="sidebar-button", icon=ICONS["annual_growth_rate"]),
-                ui.input_action_button("go_sources_local_impact", "Sources' Local Impact", class_="sidebar-button", icon=ICONS["star"] if "star" in ICONS else ICONS["sources"]),
-                ui.input_action_button("go_sources_production_over_time", "Sources' Production over Time", class_="sidebar-button", icon=ICONS["calendar"] if "calendar" in ICONS else ICONS["timespan"]),
-            with ui.accordion_panel("Authors", icon=ICONS["authors_colored"]):
-                # Authors Section
-                ui.span("Authors", style="color: gray;")
-                ui.input_action_button("go_most_relevant_authors", "Most Relevant Authors", class_="sidebar-button", icon=ICONS["authors"])
-                ui.input_action_button("go_most_local_cited_authors", "Most Local Cited Authors", class_="sidebar-button", icon=ICONS["authors_single_authored_docs"])
-                ui.input_action_button("go_authors_production_over_time", "Authors' Production over Time", class_="sidebar-button", icon=ICONS["annual_growth_rate"])
-                ui.input_action_button("go_lotkas_law", "Lotka's Law", class_="sidebar-button", icon=ICONS["overview"])
-                ui.input_action_button("go_authors_local_impact", "Authors' Local Impact", class_="sidebar-button", icon=ICONS["star"] if "star" in ICONS else ICONS["authors"])
-                # Affiliations Section
-                ui.span("Affiliations", style="color: gray;")
-                ui.input_action_button("go_most_relevant_affiliations", "Most Relevant Affiliations", class_="sidebar-button", icon=ICONS["database"])
-                ui.input_action_button("go_affiliations_production_over_time", "Affiliations' Production over Time", class_="sidebar-button", icon=ICONS["annual_growth_rate"])
-                # Countries Section
-                ui.span("Countries", style="color: gray;")
-                ui.input_action_button("go_corresponding_authors_countries", "Corresponding Author's Countries", class_="sidebar-button", icon=ICONS["international_co_authorship"])
-                ui.input_action_button("go_countries_scientific_production", "Countries' Scientific Production", class_="sidebar-button", icon=ICONS["international_co_authorship"])
-                ui.input_action_button("go_countries_production_over_time", "Countries' Production over Time", class_="sidebar-button", icon=ICONS["annual_growth_rate"])
-                ui.input_action_button("go_most_cited_countries", "Most Cited Countries", class_="sidebar-button", icon=ICONS["book"])
-            with ui.accordion_panel("Documents", icon=ICONS["documents_colored"]):
-                # Documents Section
-                ui.span("Documents", style="color: gray;")
-                ui.input_action_button("go_most_global_cited_documents", "Most Global Cited Documents", class_="sidebar-button", icon=ICONS["documents"])
-                ui.input_action_button("go_most_local_cited_documents", "Most Local Cited Documents", class_="sidebar-button", icon=ICONS["documents"])
-
-                # Cited References Section
-                ui.span("Cited References", style="color: gray;")
-                ui.input_action_button("go_most_local_cited_references", "Most Local Cited References", class_="sidebar-button", icon=ICONS["references"])
-                ui.input_action_button("go_references_spectroscopy", "References Spectroscopy", class_="sidebar-button", icon=ICONS["references"])
-
-                # Words Section
-                ui.span("Words", style="color: gray;")
-                ui.input_action_button("go_most_frequent_words", "Most Frequent Words", class_="sidebar-button", icon=ICONS["authors_keywords_de"])
-                ui.input_action_button("go_wordcloud", "WordCloud", class_="sidebar-button", icon=ICONS["authors_keywords_de"])
-                ui.input_action_button("go_treemap", "TreeMap", class_="sidebar-button", icon=ICONS["overview"])
-                ui.input_action_button("go_words_frequency_over_time", "Words' Frequency over Time", class_="sidebar-button", icon=ICONS["annual_growth_rate"])
-                ui.input_action_button("go_trend_topics", "Trend Topics", class_="sidebar-button", icon=ICONS["annual_growth_rate"])
-
-            with ui.accordion_panel("Clustering", icon=ICONS["clustering_colored"]):
-                ui.input_action_button("go_clustering", "Clustering", class_="sidebar-button", icon=ICONS["clustering"])
-            
-            with ui.accordion_panel("Conceptual Structure", icon=ICONS["conceptual_structure_colored"]):
-                ui.span("Network Approach", style="color: gray;")
-                ui.input_action_button("go_cooccurrence_network", "Co-occurrence Network", class_="sidebar-button", icon=ICONS["clustering"])
-                ui.input_action_button("go_thematic_map", "Thematic Map", class_="sidebar-button", icon=ICONS["overview"])
-                ui.input_action_button("go_thematic_evolution", "Thematic Evolution", class_="sidebar-button", icon=ICONS["annual_growth_rate"])
-
-                ui.span("Factorial Approach", style="color: gray;")
-                ui.input_action_button("go_factorial_analysis", "Factorial Analysis", class_="sidebar-button", icon=ICONS["overview"])
-
-            with ui.accordion_panel("Intellectual Structure", icon=ICONS["intellectual_structure_colored"]):
-                ui.input_action_button("go_citation_network", "Citation Network", class_="sidebar-button", icon=ICONS["references"])
-                ui.input_action_button("historiograph", "Historiograph", class_="sidebar-button", icon=ICONS["annual_growth_rate"])
-
-            with ui.accordion_panel("Social Structure", icon=ICONS["social_structure_colored"]):
-                ui.input_action_button("go_collaboration_network", "Collaboration Network", class_="sidebar-button", icon=ICONS["co_authors_per_doc"])
-                ui.input_action_button("go_countries_collaboration_network", "Countries Collaboration Network", class_="sidebar-button", icon=ICONS["international_co_authorship"])
-
-            with ui.accordion_panel("Report", icon=ICONS["report_colored"]):
-                ui.input_action_button("go_report", "Report", class_="sidebar-button", icon=ICONS["report"])
-            with ui.accordion_panel("Settings", icon=ICONS["settings_colored"]):
-                ui.input_action_button("go_settings", "Settings", class_="sidebar-button", icon=ICONS["settings"])
-
-        # --- Footer ---
-        # Use static positioning and margin-top to avoid overlap with accordion content
+    data = df.get()
+    if data is not None and not data.empty:
+        ui.tags.script("setTimeout(function() { if(typeof setSidebarState === 'function') setSidebarState(true); }, 50);")
+        with ui.tags.div(id="sidebar_2", class_="custom-sidebar"):
+            with ui.accordion(id="sidebar_accordion_data", multiple=False, open=False):
+                # Info Section
+                with ui.accordion_panel("Biblioshiny", icon=ICONS["home_colored"]):
+                    ui.input_action_button("go_about_2", "Biblioshiny", class_="sidebar-button", icon=ICONS["home"])
+                # Data Section
+                with ui.accordion_panel("Data", icon=ICONS["database_colored"]):
+                    ui.input_action_button("go_import_2", "Import or Load", class_="sidebar-button", icon=ICONS["data"])
+                    ui.input_action_button("go_api_2", "API", class_="sidebar-button", icon=ICONS["api"])
+                    ui.input_action_button("go_collections_2", "Merge Collection", class_="sidebar-button", icon=ICONS["merge"])
+    
+                # Filters Section
+                with ui.accordion_panel("Filters", icon=ICONS["filters_colored"]):
+                    ui.input_action_button("go_filters", "Filters", class_="sidebar-button", icon=ICONS["filters"])
+    
+                # Analysis Section
+                with ui.accordion_panel("Overview", icon=ICONS["play_colored"]):
+                    ui.input_action_button("go_main", "Main Information", class_="sidebar-button", icon=ICONS["overview"])
+                    ui.input_action_button("go_annual_scientific_production", "Annual Scientific Production", class_="sidebar-button", icon=ICONS["annual_growth_rate"])
+                    ui.input_action_button("go_average_citations_per_year", "Average Citations per Year", class_="sidebar-button", icon=ICONS["average_citations_per_doc"])
+                    ui.input_action_button("go_three_field_plot", "Three-Field Plot", class_="sidebar-button", icon=ICONS["overview"])
+                with ui.accordion_panel("Sources", icon=ICONS["sources_colored"]):
+                    ui.input_action_button("go_most_relevant_sources", "Most Relevant Sources", class_="sidebar-button", icon=ICONS["book_open"] if "book_open" in ICONS else ICONS["sources"]),
+                    ui.input_action_button("go_most_local_cited_sources", "Most Local Cited Sources", class_="sidebar-button", icon=ICONS["book"] if "book" in ICONS else ICONS["sources"]),
+                    ui.input_action_button("go_bradfords_law", "Bradford's Law", class_="sidebar-button", icon=ICONS["annual_growth_rate"]),
+                    ui.input_action_button("go_sources_local_impact", "Sources' Local Impact", class_="sidebar-button", icon=ICONS["star"] if "star" in ICONS else ICONS["sources"]),
+                    ui.input_action_button("go_sources_production_over_time", "Sources' Production over Time", class_="sidebar-button", icon=ICONS["calendar"] if "calendar" in ICONS else ICONS["timespan"]),
+                with ui.accordion_panel("Authors", icon=ICONS["authors_colored"]):
+                    # Authors Section
+                    ui.span("Authors", style="color: gray;")
+                    ui.input_action_button("go_most_relevant_authors", "Most Relevant Authors", class_="sidebar-button", icon=ICONS["authors"])
+                    ui.input_action_button("go_most_local_cited_authors", "Most Local Cited Authors", class_="sidebar-button", icon=ICONS["authors_single_authored_docs"])
+                    ui.input_action_button("go_authors_production_over_time", "Authors' Production over Time", class_="sidebar-button", icon=ICONS["annual_growth_rate"])
+                    ui.input_action_button("go_lotkas_law", "Lotka's Law", class_="sidebar-button", icon=ICONS["overview"])
+                    ui.input_action_button("go_authors_local_impact", "Authors' Local Impact", class_="sidebar-button", icon=ICONS["star"] if "star" in ICONS else ICONS["authors"])
+                    # Affiliations Section
+                    ui.span("Affiliations", style="color: gray;")
+                    ui.input_action_button("go_most_relevant_affiliations", "Most Relevant Affiliations", class_="sidebar-button", icon=ICONS["database"])
+                    ui.input_action_button("go_affiliations_production_over_time", "Affiliations' Production over Time", class_="sidebar-button", icon=ICONS["annual_growth_rate"])
+                    # Countries Section
+                    ui.span("Countries", style="color: gray;")
+                    ui.input_action_button("go_corresponding_authors_countries", "Corresponding Author's Countries", class_="sidebar-button", icon=ICONS["international_co_authorship"])
+                    ui.input_action_button("go_countries_scientific_production", "Countries' Scientific Production", class_="sidebar-button", icon=ICONS["international_co_authorship"])
+                    ui.input_action_button("go_countries_production_over_time", "Countries' Production over Time", class_="sidebar-button", icon=ICONS["annual_growth_rate"])
+                    ui.input_action_button("go_most_cited_countries", "Most Cited Countries", class_="sidebar-button", icon=ICONS["book"])
+                with ui.accordion_panel("Documents", icon=ICONS["documents_colored"]):
+                    # Documents Section
+                    ui.span("Documents", style="color: gray;")
+                    ui.input_action_button("go_most_global_cited_documents", "Most Global Cited Documents", class_="sidebar-button", icon=ICONS["documents"])
+                    ui.input_action_button("go_most_local_cited_documents", "Most Local Cited Documents", class_="sidebar-button", icon=ICONS["documents"])
+    
+                    # Cited References Section
+                    ui.span("Cited References", style="color: gray;")
+                    ui.input_action_button("go_most_local_cited_references", "Most Local Cited References", class_="sidebar-button", icon=ICONS["references"])
+                    ui.input_action_button("go_references_spectroscopy", "References Spectroscopy", class_="sidebar-button", icon=ICONS["references"])
+    
+                    # Words Section
+                    ui.span("Words", style="color: gray;")
+                    ui.input_action_button("go_most_frequent_words", "Most Frequent Words", class_="sidebar-button", icon=ICONS["authors_keywords_de"])
+                    ui.input_action_button("go_wordcloud", "WordCloud", class_="sidebar-button", icon=ICONS["authors_keywords_de"])
+                    ui.input_action_button("go_treemap", "TreeMap", class_="sidebar-button", icon=ICONS["overview"])
+                    ui.input_action_button("go_words_frequency_over_time", "Words' Frequency over Time", class_="sidebar-button", icon=ICONS["annual_growth_rate"])
+                    ui.input_action_button("go_trend_topics", "Trend Topics", class_="sidebar-button", icon=ICONS["annual_growth_rate"])
+    
+                with ui.accordion_panel("Clustering", icon=ICONS["clustering_colored"]):
+                    ui.input_action_button("go_clustering", "Clustering", class_="sidebar-button", icon=ICONS["clustering"])
+                
+                with ui.accordion_panel("Conceptual Structure", icon=ICONS["conceptual_structure_colored"]):
+                    ui.span("Network Approach", style="color: gray;")
+                    ui.input_action_button("go_cooccurrence_network", "Co-occurrence Network", class_="sidebar-button", icon=ICONS["clustering"])
+                    ui.input_action_button("go_thematic_map", "Thematic Map", class_="sidebar-button", icon=ICONS["overview"])
+                    ui.input_action_button("go_thematic_evolution", "Thematic Evolution", class_="sidebar-button", icon=ICONS["annual_growth_rate"])
+    
+                    ui.span("Factorial Approach", style="color: gray;")
+                    ui.input_action_button("go_factorial_analysis", "Factorial Analysis", class_="sidebar-button", icon=ICONS["overview"])
+    
+                with ui.accordion_panel("Intellectual Structure", icon=ICONS["intellectual_structure_colored"]):
+                    ui.input_action_button("go_citation_network", "Citation Network", class_="sidebar-button", icon=ICONS["references"])
+                    ui.input_action_button("historiograph", "Historiograph", class_="sidebar-button", icon=ICONS["annual_growth_rate"])
+    
+                with ui.accordion_panel("Social Structure", icon=ICONS["social_structure_colored"]):
+                    ui.input_action_button("go_collaboration_network", "Collaboration Network", class_="sidebar-button", icon=ICONS["co_authors_per_doc"])
+                    ui.input_action_button("go_countries_collaboration_network", "Countries Collaboration Network", class_="sidebar-button", icon=ICONS["international_co_authorship"])
+    
+                with ui.accordion_panel("Report", icon=ICONS["report_colored"]):
+                    ui.input_action_button("go_report", "Report", class_="sidebar-button", icon=ICONS["report"])
+                with ui.accordion_panel("Settings", icon=ICONS["settings_colored"]):
+                    ui.input_action_button("go_settings", "Settings", class_="sidebar-button", icon=ICONS["settings"])
+    
+            # --- Footer ---
+            # Use static positioning and margin-top to avoid overlap with accordion content
         with ui.tags.footer(
             class_="custom-footer",
             style=(
@@ -8344,9 +8392,9 @@ ui.tags.script("""
     });
     observer.observe(document.body, { childList: true, subtree: true });
 
-    // Show both sidebars when 'start_button' is clicked
+    // Show both sidebars when 'start_button' or 'btn_fetch_api' is clicked
     document.addEventListener("click", function(e) {
-        if (e.target && e.target.id === "start_button") {
+        if (e.target && (e.target.id === "start_button" || e.target.id === "btn_fetch_api")) {
             setSidebarState(true);
         }
     });

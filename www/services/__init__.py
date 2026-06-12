@@ -15,3 +15,7 @@ from .tabletag import *
 from .termextraction import *
 from .thematicmap import *
 from .utils import *
+from .api_retriever import *
+from .standardizer import *
+from .validator import *
+from .etl import *

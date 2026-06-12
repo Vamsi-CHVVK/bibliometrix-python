@@ -34,7 +34,7 @@ def histNetwork(df, min_citations=0, sep=";", network=True):
     # Fill missing values in TC
     M['TC'] = M['TC'].fillna(0)
 
-    if db == "Web_of_Science":
+    if db in ["Web_of_Science", "OPENALEX", "PUBMED"]:
         results = wos(M, min_citations=min_citations, sep=sep, network=network)
     elif db == "Scopus":
         results = scopus(M, min_citations=min_citations, sep=sep, network=network)
@@ -47,8 +47,6 @@ def histNetwork(df, min_citations=0, sep=";", network=True):
 
 def wos(M, min_citations, sep, network):
 
-    print("\nWOS DB:\nSearching local citations (LCS) by reference items (SR) and DOIs...\n")
-
     # Sort data by publication year
     M = M.sort_values(by="PY").reset_index(drop=True)
 
@@ -56,39 +54,70 @@ def wos(M, min_citations, sep, network):
     M['Paper'] = np.arange(0, len(M))
     M['nLABEL'] = np.arange(0, len(M))
 
-    # Process cited references (CR)
-    CR = []
-    for i, refs in enumerate(M['CR']):
-        for ref in refs:
-            # Extract DOI
-            doi = ""
-            if 'DOI' in ref:
-                parts = ref.split('DOI', 1)
-                doi = parts[1].strip() if len(parts) > 1 else ""
-            # Extract AU, PY, SO
-            ref_parts = ref.split(',')
-            au = ref_parts[0].replace('.', ' ').strip() if len(ref_parts) > 0 else ""
-            py = ref_parts[1].strip() if len(ref_parts) > 1 else ""
-            so = ref_parts[2].strip() if len(ref_parts) > 2 else ""
-            sr = f"{au}, {py}, {so}"
-            CR.append({'ref': ref, 'Paper': i, 'DI': doi, 'AU': au, 'PY': py, 'SO': so, 'SR': sr})
+    if M['DB'].iloc[0] == "OPENALEX":
+        print("\nOPENALEX DB:\nSearching local citations using OpenAlex IDs (UT) and referenced works (CR)...\n")
+        sr_col = 'SR_FULL' if 'SR_FULL' in M.columns else 'SR'
+        M['LABEL'] = M[sr_col].fillna('').str.upper() + " DOI " + M['DI'].fillna('').str.upper()
+        M['LABEL'] = M['LABEL'].str.strip()
+        # Explode CR to get one row per reference
+        CR_df = M[['UT', 'CR', 'Paper', 'nLABEL', 'PY']].explode('CR').dropna(subset=['CR']).rename(columns={'CR': 'ref', 'Paper': 'Paper_CR', 'nLABEL': 'nCITING', 'PY': 'CIT_PY'})
+        # Clean UT to match refs
+        M['UT_CLEAN'] = M['UT'].str.upper().str.strip()
+        CR_df['ref'] = CR_df['ref'].str.upper().str.strip()
+        
+        # Match references with papers (L contains all matches)
+        L = pd.merge(M, CR_df, left_on='UT_CLEAN', right_on='ref', how='right')
+        L = L[L['Paper'].notnull()]
+        
+        print("\nAfter filtering:")
+        print(L.shape)
+        
+        # Display the HTTPS link mapping just like the friend's output
+        print("\nCitation Mapping (Citing Paper -> Cited Reference):")
+        print(L[['UT_x', 'UT_CLEAN', 'Paper', 'Paper_CR']].head(20))
+        
+        print(type(L))
+        print(L.columns)
+        
+        L['CITING'] = M.loc[L['Paper_CR'], 'LABEL'].values
+        
+    else:
+        print("\nWOS/PUBMED DB:\nSearching local citations (LCS) by reference items (SR) and DOIs...\n")
+        # Process cited references (CR)
+        CR = []
+        for i, refs in enumerate(M['CR']):
+            for ref in refs:
+                # Extract DOI
+                doi = ""
+                if 'DOI' in ref:
+                    parts = ref.split('DOI', 1)
+                    doi = parts[1].strip() if len(parts) > 1 else ""
+                # Extract AU, PY, SO
+                ref_parts = ref.split(',')
+                au = ref_parts[0].replace('.', ' ').strip() if len(ref_parts) > 0 else ""
+                py = ref_parts[1].strip() if len(ref_parts) > 1 else ""
+                so = ref_parts[2].strip() if len(ref_parts) > 2 else ""
+                sr = f"{au}, {py}, {so}"
+                CR.append({'ref': ref, 'Paper': i, 'DI': doi, 'AU': au, 'PY': py, 'SO': so, 'SR': sr})
 
-    print(f"\nAnalyzing {len(CR)} reference items...\n")
+        print(f"\nAnalyzing {len(CR)} reference items...\n")
 
-    CR_df = pd.DataFrame(CR)
+        CR_df = pd.DataFrame(CR)
 
-    # Add LABEL field to M and CR
-    M['LABEL'] = M['SR_FULL'].fillna('').str.upper() + " DOI " + M['DI'].fillna('').str.upper()
-    M['LABEL'] = M['LABEL'].str.strip()
-    CR_df['LABEL'] = CR_df['SR'].fillna('').str.upper() + " DOI " + CR_df['DI'].fillna('').str.upper()
-    CR_df['LABEL'] = CR_df['LABEL'].str.strip()
+        # Add LABEL field to M and CR
+        sr_col = 'SR_FULL' if 'SR_FULL' in M.columns else 'SR'
+        M['LABEL'] = M[sr_col].fillna('').str.upper() + " DOI " + M['DI'].fillna('').str.upper()
+        M['LABEL'] = M['LABEL'].str.strip()
+        if not CR_df.empty:
+            CR_df['LABEL'] = CR_df['SR'].fillna('').str.upper() + " DOI " + CR_df['DI'].fillna('').str.upper()
+            CR_df['LABEL'] = CR_df['LABEL'].str.strip()
 
-    # Match references with papers (left join as in R)
-    L = pd.merge(M, CR_df, on='LABEL', how='left', suffixes=('_M', '_CR'))
-    L = L[L['Paper_CR'].notnull()]
-    L['CITING'] = M.loc[L['Paper_CR'], 'LABEL'].values
-    L['nCITING'] = M.loc[L['Paper_CR'], 'nLABEL'].values
-    L['CIT_PY'] = M.loc[L['Paper_CR'], 'PY'].values
+        # Match references with papers (left join as in R)
+        L = pd.merge(M, CR_df, on='LABEL', how='left', suffixes=('_M', '_CR'))
+        L = L[L['Paper_CR'].notnull()]
+        L['CITING'] = M.loc[L['Paper_CR'], 'LABEL'].values
+        L['nCITING'] = M.loc[L['Paper_CR'], 'nLABEL'].values
+        L['CIT_PY'] = M.loc[L['Paper_CR'], 'PY'].values
 
     # Compute Local Citation Scores (LCS)
     LCS = L.groupby('nLABEL').size().reset_index(name='LCS')
@@ -115,15 +144,8 @@ def wos(M, min_citations, sep, network):
                 M.at[paper_idx, 'LCR'] = row['LCR']
 
         # Assign unique names to duplicated LABELs
-        st = False
-        i = 0
-        while not st:
-            ind = M['LABEL'].duplicated(keep=False)
-            if ind.any():
-                i += 1
-                M.loc[ind, 'LABEL'] = M.loc[ind, 'LABEL'] + f"-{chr(96 + i)}"
-            else:
-                st = True
+        counts = M.groupby('LABEL').cumcount()
+        M['LABEL'] = M['LABEL'] + counts.apply(lambda x: f"-{chr(96 + x)}" if x > 0 else "")
         M.index = M['LABEL'].str.strip()
 
         M['LCR'] = M['LCR'].fillna('')

@@ -42,21 +42,24 @@ def get_data(input, database, df, reset_callback=None):
             else:
                 # Process single file (original logic)
                 type = file[0]["name"]
-                json = biblio_json(file[0]["datapath"], source, type, author)
-                df.set(pd.read_json(StringIO(json)))
+                
+                # Base Level: Bypass the fragile legacy 'biblio_json' parser and directly use our ETL Pipeline!
+                clean_df = ETLPipeline.convert2df(source_data=file[0]["datapath"], source_type=source, is_api=False, original_filename=type)
+                df.set(clean_df)
+                
                 # Reset all analysis results when new dataset is loaded
                 if reset_callback:
                     reset_callback()
                 
                 if type.endswith(".zip"):
                     text = ui.p(
-                        f"{database}'s ZIP archive uploaded and extracted successfully! "
+                        f"{database}'s ZIP archive uploaded, extracted, and Standardized successfully! "
                         f"Multiple files have been processed and combined. "
                         f"The dataset contains {df.get().shape[0]} rows and {df.get().shape[1]} columns."
                     )
                 else:
                     text = ui.p(
-                        f"{database}'s file uploaded successfully! You can now proceed to analyze your data. "
+                        f"{database}'s file uploaded and Standardized successfully! You can now proceed to analyze your data. "
                         f"The dataset contains {df.get().shape[0]} rows and {df.get().shape[1]} columns."
                     )
         except Exception as e:
